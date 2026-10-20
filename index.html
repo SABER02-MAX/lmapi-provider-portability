@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Provider Portability — 能跑 ≠ 语义相同 | LMAPI 知识网页</title>
+<meta name="description" content="同一段 OpenAI SDK 代码，搬到 Claude / Gemini / 兼容端点会发生什么？交互式讲解 Provider Portability：参数改名、静默忽略、报错与语义漂移。中英双语。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%23FFFFFF'/%3E%3Cpath d='M12 18h40v28H12z' fill='none' stroke='%232A2E3B' stroke-width='3' rx='6'/%3E%3Cpath d='M12 26h40' stroke='%236D3FE0' stroke-width='3'/%3E%3Ccircle cx='24' cy='38' r='4' fill='%2310A37F'/%3E%3Ccircle cx='34' cy='38' r='4' fill='%23D97757'/%3E%3Ccircle cx='44' cy='38' r='4' fill='%234285F4'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+  :root{
+    --bg:#FFFFFF;--bg-soft:#F7F8FB;--surface:#FFFFFF;
+    --border:#E7E9F0;--border-strong:#D5D9E3;
+    --text:#16181F;--dim:#5B6275;--faint:#8B91A4;
+    --ink:#2A2E3B;
+    --accent:#6D3FE0;--accent-deep:#5B2FC6;--accent-tint:#F2EEFC;
+    --oa:#10A37F;--oa-tint:#E7F6F1;
+    --cl:#D97757;--cl-tint:#FCF0EC;
+    --ge:#4285F4;--ge-tint:#ECF2FE;
+    --cp:#8B5CF6;--cp-tint:#F3EFFD;
+    --ok:#0E9F6E;--warn:#C77800;--err:#D64545;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Cascadia Mono","Courier New",monospace;
+    --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    --maxw:1140px;--radius:14px;
+    --shadow:0 10px 30px rgba(21,23,32,.06);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:var(--sans);font-size:16px;line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+  }
+  body.lang-en .z, body.lang-zh .e{display:none}
+  ::selection{background:rgba(109,63,224,.16);color:var(--text)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{color:var(--accent-deep)}
+  code,kbd{font-family:var(--mono);font-size:.88em}
+  code{overflow-wrap:anywhere}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  section{scroll-margin-top:78px}
+
+  /* ===== 导航 ===== */
+  .nav{
+    position:fixed;inset:0 0 auto 0;z-index:100;
+    background:rgba(255,255,255,.9);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-inner{max-width:var(--maxw);margin:0 auto;padding:0 28px;height:62px;display:flex;align-items:center;gap:24px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15.5px;color:var(--text);letter-spacing:.1px}
+  .brand svg{flex:none}
+  .brand:hover{color:var(--text)}
+  .nav-links{display:flex;gap:2px;margin-left:8px}
+  .nav-links a{
+    padding:7px 11px;border-radius:8px;color:var(--dim);
+    font-size:13.5px;font-weight:500;transition:color .15s,background .15s;
+  }
+  .nav-links a:hover{color:var(--text);background:rgba(21,23,32,.05)}
+  .nav-links a.active{color:var(--accent-deep);background:var(--accent-tint)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .lang-switch{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden;background:var(--bg-soft)}
+  .lang-switch button{
+    background:transparent;border:0;padding:6px 13px;cursor:pointer;
+    font-size:13px;font-weight:600;color:var(--dim);font-family:var(--sans);transition:all .15s;
+  }
+  .lang-switch button:hover{color:var(--text)}
+  .lang-switch button.on{background:var(--accent);color:#fff}
+  .nav .btn{padding:8px 15px;font-size:13.5px}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;
+    font-size:14px;font-weight:600;font-family:var(--sans);border:1px solid transparent;cursor:pointer;
+    transition:transform .15s,background .15s,border-color .15s,color .15s;white-space:nowrap;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(109,63,224,.22)}
+  .btn-primary:hover{background:var(--accent-deep);color:#fff}
+  .btn-ghost{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .nav-burger{display:none;margin-left:auto;background:transparent;border:1px solid var(--border-strong);border-radius:8px;color:var(--text);width:38px;height:38px;cursor:pointer;align-items:center;justify-content:center}
+  .nav-burger svg{width:18px;height:18px}
+
+  /* ===== Hero ===== */
+  .hero{
+    padding:130px 0 72px;text-align:center;
+    background:
+      radial-gradient(860px 400px at 50% -80px, rgba(139,92,246,.10), transparent 65%),
+      radial-gradient(500px 260px at 12% 8%, rgba(16,163,127,.06), transparent 60%),
+      radial-gradient(500px 260px at 88% 4%, rgba(66,133,244,.07), transparent 60%),
+      var(--bg);
+    border-bottom:1px solid var(--border);
+  }
+  .hero-tag{
+    display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--accent-deep);
+    background:var(--accent-tint);border:1px solid rgba(109,63,224,.22);padding:6px 14px;border-radius:999px;margin-bottom:22px;
+  }
+  .hero h1{font-size:clamp(32px,4.8vw,52px);line-height:1.14;font-weight:900;letter-spacing:-.5px;margin-bottom:18px}
+  .hero h1 em{font-style:normal;color:var(--accent)}
+  .hero-sub{font-size:16.5px;color:var(--dim);max-width:660px;margin:0 auto 30px;line-height:1.85}
+  .hero-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:34px}
+  .provider-strip{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .pchip{
+    display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink);
+    background:var(--surface);border:1px solid var(--border-strong);border-radius:999px;padding:8px 16px;
+  }
+  .pchip .dot{width:9px;height:9px;border-radius:50%}
+  .pchip .dot.oa{background:var(--oa)} .pchip .dot.cl{background:var(--cl)} .pchip .dot.ge{background:var(--ge)} .pchip .dot.cp{background:var(--cp)}
+  .pchip b{font-weight:700}
+  .pchip small{color:var(--faint);font-weight:500;font-size:12.5px}
+
+  /* ===== 区块 ===== */
+  .sec{padding:84px 0}
+  .sec-alt{background:var(--bg-soft);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .sec-head{margin-bottom:40px;max-width:780px}
+  .sec-eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px}
+  .sec-eyebrow::before{content:"";width:20px;height:2px;background:var(--accent);border-radius:2px}
+  .sec-head h2{font-size:clamp(25px,3vw,33px);font-weight:800;letter-spacing:-.3px;line-height:1.25;margin-bottom:12px}
+  .sec-head p{color:var(--dim);font-size:15.5px;line-height:1.8}
+
+  /* ===== 失败模式 ===== */
+  .fail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .fail{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px 24px;position:relative;overflow:hidden}
+  .fail::before{content:"";position:absolute;inset:0 0 auto 0;height:3px}
+  .fail.f-err::before{background:var(--err)}
+  .fail.f-silent::before{background:var(--warn)}
+  .fail.f-drift::before{background:var(--ge)}
+  .fail-ic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+  .fail-ic svg{width:20px;height:20px}
+  .f-err .fail-ic{background:#FBEAEA;color:var(--err)}
+  .f-silent .fail-ic{background:#FCF3E3;color:var(--warn)}
+  .f-drift .fail-ic{background:var(--ge-tint);color:var(--ge)}
+  .fail h3{font-size:16.5px;font-weight:700;margin-bottom:8px}
+  .fail p{font-size:13.8px;color:var(--dim);line-height:1.75}
+  .fail .ex{font-size:12.5px;color:var(--faint);margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-family:var(--mono)}
+
+  /* ===== 移植台 ===== */
+  .lab{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  .lab-panel{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+  .lab-head{display:flex;align-items:center;gap:8px;padding:13px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .lab-head .lab-title{font-size:14.5px;font-weight:700;color:var(--ink)}
+  .lab-head .tag{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px}
+  .lab-head .tag.t-oa{background:var(--oa-tint);color:var(--oa)}
+  .lab-head .tag.t-cl{background:var(--cl-tint);color:var(--cl)}
+  .lab-head .tag.t-ge{background:var(--ge-tint);color:var(--ge)}
+  .lab-head .tag.t-cp{background:var(--cp-tint);color:var(--cp)}
+  .lab-head .tag.t-az{background:#E9EEF8;color:#4A6FA5}
+  .lab-body{padding:16px 18px}
+  .lab-body pre{background:#0F1117;color:#D7DAE0;border-radius:10px;padding:15px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.6px;line-height:1.75}
+  .lab-body pre .c{color:#6B7280}
+  .lab-body pre .k{color:#93C5FD}
+  .lab-body pre .s{color:#A5D6A7}
+  .lab-body pre .hl{background:rgba(139,92,246,.28);border-radius:3px;padding:0 2px}
+  .vd-list{list-style:none}
+  .vd{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed var(--border);font-size:13.5px;line-height:1.7;color:var(--dim);align-items:flex-start}
+  .vd:last-child{border-bottom:0}
+  .vd b{color:var(--ink);font-weight:600}
+  .vd code{font-size:12.3px;color:var(--ink);background:var(--bg-soft);padding:1px 6px;border-radius:5px}
+  .vd-badge{flex:none;margin-top:1px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;letter-spacing:.2px}
+  .vd-ok .vd-badge{background:#E7F6EF;color:var(--ok)}
+  .vd-move .vd-badge{background:var(--ge-tint);color:var(--ge)}
+  .vd-req .vd-badge{background:#FCF3E3;color:var(--warn)}
+  .vd-drop .vd-badge{background:#FBEAEA;color:var(--err)}
+  .vd-silent .vd-badge{background:#F3F0E8;color:#9A7B1F}
+  .vd-extra .vd-badge{background:var(--cp-tint);color:var(--cp)}
+  .lab-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .lab-tab{
+    background:transparent;border:1px solid var(--border);border-radius:9px;
+    padding:8px 13px;font-size:13.5px;font-weight:500;color:var(--dim);cursor:pointer;
+    font-family:var(--sans);transition:all .15s;
+  }
+  .lab-tab:hover{color:var(--text);border-color:var(--border-strong)}
+  .lab-tab.on{color:#fff;border-color:transparent}
+  .lab-tab.on.t-oa{background:var(--oa)}
+  .lab-tab.on.t-cl{background:var(--cl)}
+  .lab-tab.on.t-ge{background:var(--ge)}
+  .lab-tab.on.t-cp{background:var(--cp)}
+  .lab-tab.on.t-az{background:#4A6FA5}
+  .lab-note{grid-column:1/-1;font-size:13px;color:var(--faint);margin-top:2px}
+  .lab-note code{font-size:12px}
+
+  /* ===== 差异矩阵 ===== */
+  .matrix-wrap{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+  .matrix-scroll{overflow-x:auto}
+  table.matrix{border-collapse:collapse;width:100%;min-width:860px}
+  .matrix th,.matrix td{padding:12px 14px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;font-size:13px;line-height:1.6}
+  .matrix thead th{font-size:12.5px;font-weight:700;background:var(--bg-soft);white-space:nowrap}
+  .matrix thead th.rowhead{width:190px;background:var(--surface);position:sticky;left:0;z-index:2}
+  .matrix tbody th.rowhead{background:var(--surface);position:sticky;left:0;z-index:1;cursor:pointer;font-size:13.2px;color:var(--ink);transition:background .13s;min-width:190px}
+  .matrix tbody th.rowhead:hover{background:var(--bg-soft)}
+  .matrix tbody th.rowhead .rh-tag{display:block;font-size:10.5px;font-weight:600;margin-top:3px;letter-spacing:.3px}
+  .matrix tbody th.rowhead .rh-tag.rt-err{color:var(--err)} .matrix tbody th.rowhead .rh-tag.rt-silent{color:#9A7B1F} .matrix tbody th.rowhead .rh-tag.rt-drift{color:var(--ge)}
+  .matrix td{color:var(--dim)}
+  .matrix td b{color:var(--ink);font-weight:600}
+  .matrix td code{font-size:11.6px;color:var(--ink);background:var(--bg-soft);padding:0 5px;border-radius:4px}
+  .matrix tbody tr{cursor:pointer;transition:background .12s}
+  .matrix tbody tr:hover{background:#FAFAFD}
+  .matrix tbody tr.open{background:var(--accent-tint)}
+  .matrix th.oa{color:var(--oa)} .matrix th.cl{color:var(--cl)} .matrix th.ge{color:var(--ge)} .matrix th.cp{color:var(--cp)}
+  .matrix-detail{display:none;padding:20px 24px;border-top:1px solid var(--border);background:#FAFAFD}
+  .matrix-detail.show{display:block;animation:fadeIn .2s ease}
+  .matrix-detail h4{font-size:15px;font-weight:700;margin-bottom:8px}
+  .matrix-detail p{font-size:13.5px;color:var(--dim);line-height:1.8;margin-bottom:10px}
+  .matrix-detail p:last-child{margin-bottom:0}
+  .matrix-detail .ref{font-size:12.5px;color:var(--faint)}
+  .matrix-detail .ref a{color:var(--accent)}
+  .mt-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .mt-filter{background:transparent;border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--dim);cursor:pointer;font-family:var(--sans);transition:all .15s}
+  .mt-filter:hover{color:var(--text)}
+  .mt-filter.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ===== 陷阱测试 ===== */
+  .quiz-list{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .quiz{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;display:flex;flex-direction:column}
+  .quiz .q-no{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px}
+  .quiz .q-t{font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.7;margin-bottom:14px;flex:1}
+  .quiz .q-t code{font-size:12.5px}
+  .quiz-opts{display:flex;flex-direction:column;gap:8px}
+  .quiz-opt{
+    background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;
+    padding:10px 14px;font-size:13.5px;color:var(--ink);cursor:pointer;text-align:left;
+    font-family:var(--sans);transition:all .15s;
+  }
+  .quiz-opt:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .quiz-opt.right{background:#E7F6EF;border-color:var(--ok);color:#0B7A50}
+  .quiz-opt.wrong{background:#FBEAEA;border-color:var(--err);color:#B53B3B}
+  .quiz-opt:disabled{cursor:default}
+  .quiz-exp{display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);font-size:13px;color:var(--dim);line-height:1.75}
+  .quiz-exp.show{display:block}
+  .quiz-exp .ref{font-size:12px;color:var(--faint)}
+  .quiz-exp .ref a{color:var(--accent)}
+  .quiz-status{font-size:12.5px;color:var(--faint);margin-top:10px;font-weight:600}
+
+  /* ===== 清单 ===== */
+  .checklist-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:26px 28px;box-shadow:var(--shadow);max-width:820px}
+  .cl-progress{height:8px;background:var(--bg-soft);border-radius:99px;overflow:hidden;margin-bottom:22px}
+  .cl-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent2,#8B5CF6),var(--accent));transition:width .3s ease;border-radius:99px}
+  .cl-item{display:flex;gap:13px;padding:13px 0;border-bottom:1px solid var(--border);cursor:pointer;align-items:flex-start}
+  .cl-item:last-child{border-bottom:0}
+  .cl-item input{display:none}
+  .cl-box{flex:none;width:22px;height:22px;border-radius:7px;border:2px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:#fff;transition:all .15s;margin-top:2px}
+  .cl-item input:checked + .cl-box{background:var(--accent);border-color:var(--accent)}
+  .cl-item input:checked ~ .cl-text{color:var(--faint);text-decoration:line-through;text-decoration-color:rgba(139,145,164,.5)}
+  .cl-text{font-size:14px;color:var(--ink);line-height:1.65}
+  .cl-text code{font-size:12.3px}
+  .cl-text .note{display:block;font-size:12.3px;color:var(--faint);margin-top:2px}
+  .cl-reset{background:transparent;border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--dim);cursor:pointer;font-family:var(--sans);margin-top:18px;transition:all .15s}
+  .cl-reset:hover{color:var(--accent-deep);border-color:var(--accent)}
+  .cl-count{font-size:13px;font-weight:700;color:var(--accent-deep)}
+
+  /* ===== 结论 ===== */
+  .takeaway{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .tk{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px 22px;border-top:3px solid var(--accent)}
+  .tk h3{font-size:15.5px;font-weight:700;margin-bottom:8px}
+  .tk p{font-size:13.5px;color:var(--dim);line-height:1.75}
+  .tk code{font-size:12.3px}
+
+  /* ===== 引用 ===== */
+  .refs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .ref-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start;transition:border-color .15s}
+  .ref-card:hover{border-color:rgba(109,63,224,.4)}
+  .ref-card .rc-ic{flex:none;width:34px;height:34px;border-radius:9px;background:var(--accent-tint);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .ref-card .rc-ic svg{width:16px;height:16px}
+  .ref-card .rc-t{font-size:13.8px;font-weight:600;color:var(--ink);line-height:1.5}
+  .ref-card .rc-u{font-size:11.8px;color:var(--faint);margin-top:3px;word-break:break-all}
+  .ref-card a{color:var(--accent)}
+
+  /* ===== 页脚 ===== */
+  .footer{border-top:1px solid var(--border);background:var(--bg-soft);padding:40px 0;margin-top:40px}
+  .footer-inner{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--faint)}
+  .footer-inner b{color:var(--dim)}
+
+  /* ===== Toast ===== */
+  .toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%) translateY(14px);background:#1F2330;color:#F2F3F7;border:1px solid rgba(255,255,255,.12);padding:9px 18px;border-radius:10px;font-size:13.5px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200;box-shadow:0 12px 34px rgba(0,0,0,.25)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ===== 响应式 ===== */
+  @media (max-width:1024px){
+    .lab{grid-template-columns:1fr}
+    .fail-grid{grid-template-columns:1fr}
+    .takeaway{grid-template-columns:1fr}
+    .quiz-list{grid-template-columns:1fr}
+    .refs{grid-template-columns:1fr}
+  }
+  @media (max-width:860px){
+    .nav-links{display:none}
+    .nav-burger{display:flex}
+    .nav-menu{position:fixed;top:62px;left:0;right:0;z-index:99;background:rgba(255,255,255,.98);border-bottom:1px solid var(--border);padding:12px 24px 18px;display:none}
+    .nav-menu.open{display:block}
+    .nav-menu a{display:block;padding:11px 6px;color:var(--dim);font-size:15px;border-bottom:1px solid var(--border)}
+    .nav-menu a:last-child{border-bottom:0}
+    .nav-menu a:hover{color:var(--accent-deep)}
+  }
+  @media (max-width:640px){
+    .wrap{padding:0 20px}
+    .nav-inner{padding:0 20px}
+    .hero{padding:110px 0 54px}
+    .nav-right .btn-ghost{display:none}
+    .sec{padding:64px 0}
+    .lab-body pre{font-size:11.6px}
+    .checklist-card{padding:20px 18px}
+  }
+</style>
+</head>
+<body class="lang-zh">
+
+<!-- ===== 导航 ===== -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="Provider Portability 首页">
+      <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF"/><path d="M12 18h40v28H12z" fill="none" stroke="#2A2E3B" stroke-width="3"/><path d="M12 27h40" stroke="#6D3FE0" stroke-width="3"/><circle cx="24" cy="39" r="4.5" fill="#10A37F"/><circle cx="34" cy="39" r="4.5" fill="#D97757"/><circle cx="44" cy="39" r="4.5" fill="#4285F4"/></svg>
+      Provider Portability
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="#problem" data-spy="problem"><span class="z">问题</span><span class="e">Problem</span></a>
+      <a href="#lab" data-spy="lab"><span class="z">移植台</span><span class="e">Porting Lab</span></a>
+      <a href="#matrix" data-spy="matrix"><span class="z">差异矩阵</span><span class="e">Diff Matrix</span></a>
+      <a href="#quiz" data-spy="quiz"><span class="z">陷阱测试</span><span class="e">Pitfall Quiz</span></a>
+      <a href="#checklist" data-spy="checklist"><span class="z">迁移清单</span><span class="e">Checklist</span></a>
+      <a href="#conclusion" data-spy="conclusion"><span class="z">结论</span><span class="e">Takeaways</span></a>
+    </div>
+    <div class="nav-right">
+      <div class="lang-switch" role="group" aria-label="语言切换 / Language">
+        <button id="langZh" class="on" type="button">中文</button>
+        <button id="langEn" type="button">EN</button>
+      </div>
+      <a class="btn btn-ghost" href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener"><span class="z">GitHub</span><span class="e">GitHub</span></a>
+    </div>
+    <button class="nav-burger" id="navBurger" aria-label="菜单" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</nav>
+<div class="nav-menu" id="navMenu">
+  <a href="#problem" data-spy="problem"><span class="z">问题</span><span class="e">Problem</span></a>
+  <a href="#lab" data-spy="lab"><span class="z">移植台</span><span class="e">Porting Lab</span></a>
+  <a href="#matrix" data-spy="matrix"><span class="z">差异矩阵</span><span class="e">Diff Matrix</span></a>
+  <a href="#quiz" data-spy="quiz"><span class="z">陷阱测试</span><span class="e">Pitfall Quiz</span></a>
+  <a href="#checklist" data-spy="checklist"><span class="z">迁移清单</span><span class="e">Checklist</span></a>
+  <a href="#conclusion" data-spy="conclusion"><span class="z">结论</span><span class="e">Takeaways</span></a>
+</div>
+
+<main id="top">
+<!-- ===== Hero ===== -->
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-tag"><span class="z">LMAPI 实验课 · 子任务 F · 中英双语</span><span class="e">LMAPI Lab · Subtask F · Bilingual (中文 / EN)</span></div>
+    <h1><span class="z">能跑 ≠ 语义相同</span><span class="e">It Runs ≠ It Means the Same</span></h1>
+    <p class="hero-sub"><span class="z">同一段「OpenAI SDK 风格」的代码，把 <code>base_url</code> 换成 Claude、Gemini 或 vLLM 兼容端点——HTTP 200 只说明端点存在，参数名、默认值、流式结构、token 计费都可能悄悄不同。这个页面用交互方式拆给你看。</span><span class="e">Take the same "OpenAI-SDK-style" code and point <code>base_url</code> at Claude, Gemini, or a vLLM-compatible endpoint — an HTTP 200 only means the endpoint exists. Parameter names, defaults, streaming shapes, and token billing can all quietly differ. This page breaks it down interactively.</span></p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#lab"><span class="z">打开移植台</span><span class="e">Open the Porting Lab</span></a>
+      <a class="btn btn-ghost" href="#matrix"><span class="z">直接看差异矩阵</span><span class="e">Jump to the Diff Matrix</span></a>
+    </div>
+    <div class="provider-strip">
+      <span class="pchip"><span class="dot oa"></span><b>OpenAI</b> <small><span class="z">参考实现</span><span class="e">reference</span></small></span>
+      <span class="pchip"><span class="dot cl"></span><b>Anthropic Claude</b> <small><span class="z">严格拒绝型</span><span class="e">strict</span></small></span>
+      <span class="pchip"><span class="dot ge"></span><b>Google Gemini</b> <small><span class="z">原生 + 兼容层</span><span class="e">native + compat</span></small></span>
+      <span class="pchip"><span class="dot cp"></span><b>vLLM 等兼容端点</b> <small><span class="z">静默容忍型</span><span class="e">lenient</span></small></span>
+    </div>
+  </div>
+</header>
+
+<!-- ===== 问题 ===== -->
+<section class="sec" id="problem">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">01 · 问题</span><span class="e">01 · The Problem</span></span>
+      <h2><span class="z">「OpenAI 兼容」是一种幻觉</span><span class="e">"OpenAI-Compatible" Is an Illusion</span></h2>
+      <p><span class="z">「兼容层」只承诺<strong>请求格式</strong>长得像，不承诺<strong>语义</strong>相同。同一段代码换端点后，失败会以三种面貌出现：</span><span class="e">A "compatibility layer" only promises the <strong>request shape</strong> looks similar — not that the <strong>semantics</strong> are identical. After switching endpoints, the same code fails in three ways:</span></p>
+    </div>
+    <div class="fail-grid">
+      <div class="fail f-err">
+        <div class="fail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></div>
+        <h3><span class="z">直接报错（响亮）</span><span class="e">Hard error (loud)</span></h3>
+        <p><span class="z">目标 API 不存在的参数/字段，被<strong>严格校验</strong>的端点拒绝：Claude 缺 <code>max_tokens</code> 会 400，传未知参数会被拒；vLLM 模型没有 chat template 时 chat 请求直接报错。</span><span class="e">Strict endpoints reject parameters or fields they don't have: Claude returns 400 without <code>max_tokens</code>; vLLM chat requests fail outright when the model has no chat template.</span></p>
+        <p class="ex">400 invalid_request_error · BadRequestError</p>
+      </div>
+      <div class="fail f-silent">
+        <div class="fail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <h3><span class="z">静默忽略（最危险）</span><span class="e">Silently ignored (most dangerous)</span></h3>
+        <p><span class="z">兼容层把不认识的参数<strong>悄悄丢掉</strong>，HTTP 200 照常返回：Gemini 兼容层会静默忽略白名单之外的参数；<code>frequency_penalty</code>、<code>seed</code> 在许多端点被无视。你以为在控温度，其实根本没生效。</span><span class="e">Compatibility layers quietly drop unknown parameters and still return 200: Gemini's compat layer silently ignores params outside its whitelist; <code>frequency_penalty</code> and <code>seed</code> are ignored by many endpoints. You think you're controlling sampling — you aren't.</span></p>
+        <p class="ex">200 OK · parameters dropped</p>
+      </div>
+      <div class="fail f-drift">
+        <div class="fail-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+        <h3><span class="z">语义漂移（最难查）</span><span class="e">Semantic drift (hardest to debug)</span></h3>
+        <p><span class="z">参数都存在、都能跑，但<strong>含义不同</strong>：<code>max_tokens</code> 在不同端点 = 输出上限 / 必填项 / 映射到 <code>max_output_tokens</code>；同一个 chat template 渲染出的 token 不同；<code>temperature</code> 默认值与实现不同。</span><span class="e">Parameters exist and run, but <strong>mean different things</strong>: <code>max_tokens</code> becomes a required field, or maps to <code>max_output_tokens</code>; the same chat template renders different tokens; <code>temperature</code> defaults differ.</span></p>
+        <p class="ex">200 OK · same call, different output</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 移植台 ===== -->
+<section class="sec sec-alt" id="lab">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">02 · 交互演示 · 移植台</span><span class="e">02 · Interactive · Porting Lab</span></span>
+      <h2><span class="z">同一段代码，五种命运</span><span class="e">One Snippet, Five Fates</span></h2>
+      <p><span class="z">下面是同一段「用 OpenAI SDK 让模型输出 JSON」的代码。点击不同端点，看它被<strong>改名、丢弃、报错</strong>还是<strong>悄悄忽略</strong>——注意每个 <span style="background:rgba(139,92,246,.25);border-radius:3px;padding:0 3px">紫色高亮</span> 的差异点。</span><span class="e">Here is the same "ask the model for JSON via the OpenAI SDK" snippet. Click different endpoints to see it get <strong>renamed, dropped, rejected</strong>, or <strong>silently ignored</strong> — watch the <span style="background:rgba(139,92,246,.25);border-radius:3px;padding:0 3px">purple highlights</span>.</span></p>
+    </div>
+
+    <div class="lab-tabs" role="tablist" aria-label="端点选择 / Endpoints">
+      <button class="lab-tab on t-cp" role="tab" aria-selected="true" data-tab="t-base"><span class="z">基准 · OpenAI</span><span class="e">Baseline · OpenAI</span></button>
+      <button class="lab-tab t-cl" role="tab" aria-selected="false" data-tab="t-claude"><span class="z">Claude 原生 SDK</span><span class="e">Claude native SDK</span></button>
+      <button class="lab-tab t-ge" role="tab" aria-selected="false" data-tab="t-gemini"><span class="z">Gemini 原生 SDK</span><span class="e">Gemini native SDK</span></button>
+      <button class="lab-tab t-ge" role="tab" aria-selected="false" data-tab="t-gemcompat"><span class="z">Gemini 兼容层</span><span class="e">Gemini compat layer</span></button>
+      <button class="lab-tab t-cp" role="tab" aria-selected="false" data-tab="t-vllm"><span class="z">vLLM 本地端点</span><span class="e">vLLM local endpoint</span></button>
+      <button class="lab-tab t-az" role="tab" aria-selected="false" data-tab="t-azure"><span class="z">Azure OpenAI</span><span class="e">Azure OpenAI</span></button>
+    </div>
+
+    <!-- 基准 OpenAI -->
+    <div class="lab" data-panel="t-base">
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-oa">OpenAI</span><span class="lab-title"><span class="z">基准代码（参考实现）</span><span class="e">Baseline (reference implementation)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> openai <span class="k">import</span> OpenAI
+client = OpenAI()
+
+resp = client.chat.completions.create(
+    model=<span class="s">"gpt-4o"</span>,
+    messages=[
+        {<span class="s">"role"</span>: <span class="s">"system"</span>, <span class="s">"content"</span>: <span class="s">"你是简洁的助手，只输出 JSON。"</span>},
+        {<span class="s">"role"</span>: <span class="s">"user"</span>,   <span class="s">"content"</span>: <span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span>},
+    ],
+    max_tokens=<span class="hl">200</span>,            <span class="c"># 输出上限（可省略）</span>
+    temperature=<span class="hl">0.7</span>,           <span class="c"># 采样温度</span>
+    response_format={<span class="s">"type"</span>: <span class="s">"json_object"</span>},  <span class="c"># JSON 模式</span>
+    frequency_penalty=<span class="hl">0.5</span>,      <span class="c"># 频率惩罚</span>
+    seed=<span class="hl">42</span>,                  <span class="c"># 随机种子（尽力而为）</span>
+)
+<span class="k">print</span>(resp.choices[0].message.content)  <span class="c"># 响应结构</span></code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单：这是对照基准</span><span class="e">Verdicts: this is the baseline</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-ok"><span class="vd-badge"><span class="z">基准</span><span class="e">BASE</span></span><span><b>所有对比以这段代码为起点。</b><span class="z">它本身也有自己的坑：推理模型（o 系列 / gpt-5）上 OpenAI 官方更推荐 <code>max_completion_tokens</code>，且 <code>seed</code> 是「尽力而为」而非保证。</span><span class="e">All comparisons start from this snippet. Even it has caveats: on reasoning models (o-series / gpt-5) OpenAI recommends <code>max_completion_tokens</code>, and <code>seed</code> is best-effort, not guaranteed.</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">注意</span><span class="e">NOTE</span></span><span><code>messages</code> 是 OpenAI 的核心结构：<code>system</code> 是 <code>messages[0]</code> 的一个角色；<code>usage.prompt_tokens / completion_tokens</code> 是计费字段。这两点在其他端点都<strong>不是这样的</strong>。</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Claude 原生 -->
+    <div class="lab" data-panel="t-claude" hidden>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-cl">Anthropic</span><span class="lab-title"><span class="z">Claude 原生 SDK（严格型）</span><span class="e">Claude native SDK (strict)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> anthropic <span class="k">import</span> Anthropic
+client = Anthropic()
+
+resp = client.messages.create(
+    model=<span class="s">"claude-sonnet-4-6"</span>,
+    system=<span class="hl"><span class="s">"你是简洁的助手，只输出 JSON。"</span></span>,  <span class="c"># system 移到顶层参数</span>
+    messages=[{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: <span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span>}],
+    max_tokens=<span class="hl">200</span>,          <span class="c"># 必填！无默认值</span>
+    temperature=<span class="hl">0.7</span>,
+)
+<span class="k">print</span>(resp.content[0].text)  <span class="c"># 不是 choices[0].message.content</span></code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单</span><span class="e">Verdicts</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-req"><span class="vd-badge"><span class="z">必填</span><span class="e">REQUIRED</span></span><span><b><code>max_tokens</code> 变成必填。</b><span class="z">OpenAI 可以省略；Anthropic 不传直接 400，且不同模型有各自上限。</span><span class="e">OpenAI lets you omit it; Anthropic returns 400 without it, with per-model caps.</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">移动</span><span class="e">MOVED</span></span><span><b>system 提示换位置。</b><span class="z">从 <code>messages[0].role="system"</code> 移到顶层 <code>system</code> 参数。</span><span class="e">From <code>messages[0].role="system"</code> to a top-level <code>system</code> parameter.</span></span></li>
+            <li class="vd vd-drop"><span class="vd-badge"><span class="z">不支持</span><span class="e">UNSUPPORTED</span></span><span><b><code>response_format</code> 不存在。</b><span class="z">Anthropic 没有 JSON 模式参数，传了会报错；要稳定 JSON 得用 system 提示 + 工具调用（<code>input_schema</code>）或预填充。</span><span class="e">Anthropic has no JSON-mode parameter — passing it errors. For reliable JSON, use system hints + tool use (<code>input_schema</code>) or prefill.</span></span></li>
+            <li class="vd vd-drop"><span class="vd-badge"><span class="z">不支持</span><span class="e">UNSUPPORTED</span></span><span><b><code>frequency_penalty</code> / <code>presence_penalty</code> / <code>seed</code> / <code>logit_bias</code> 未实现。</b><span class="z">SDK 强类型，直接传会客户端报错；HTTP 直发也会被拒。不是忽略，是<strong>拒绝</strong>。</span><span class="e">Not implemented — the typed SDK raises before sending; raw HTTP is rejected too. It's a <strong>rejection</strong>, not an ignore.</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">响应</span><span class="e">RESPONSE</span></span><span><b>返回结构不同。</b><span class="z"><code>choices[0].message.content</code> → <code>content[0].text</code>；<code>usage.prompt_tokens</code> → <code>usage.input_tokens</code>。</span><span class="e"><code>choices[0].message.content</code> → <code>content[0].text</code>; <code>usage.prompt_tokens</code> → <code>usage.input_tokens</code>.</span></span></li>
+            <li class="vd vd-drift"><span class="vd-badge"><span class="z">语义</span><span class="e">SEMANTICS</span></span><span><b>同样 <code>temperature=0.7</code> 不代表同样分布。</b><span class="z">两家采样实现与校准不同——「参数名相同」不等于「行为相同」。</span><span class="e">The same <code>temperature=0.7</code> doesn't mean the same distribution — sampling implementations differ.</span></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gemini 原生 -->
+    <div class="lab" data-panel="t-gemini" hidden>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-ge">Gemini</span><span class="lab-title"><span class="z">Gemini 原生 SDK（google-genai）</span><span class="e">Gemini native SDK (google-genai)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> google <span class="k">import</span> genai
+client = genai.Client()
+
+resp = client.interactions.create(
+    model=<span class="s">"gemini-3.8-flash"</span>,
+    system_instruction=<span class="hl"><span class="s">"你是简洁的助手，只输出 JSON。"</span></span>,  <span class="c"># 顶层参数</span>
+    input=<span class="hl"><span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span></span>,      <span class="c"># messages → input</span>
+    generation_config={
+        <span class="s">"max_output_tokens"</span>: <span class="hl">200</span>,   <span class="c"># max_tokens → max_output_tokens</span>
+        <span class="s">"temperature"</span>: <span class="hl">0.7</span>,
+    },
+)
+<span class="k">print</span>(resp.output_text)  <span class="c"># 不是 choices[0].message.content</span></code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单</span><span class="e">Verdicts</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">改名</span><span class="e">RENAMED</span></span><span><b>结构整体不同。</b><span class="z"><code>messages</code> → <code>input</code>（或 <code>contents</code>）；系统提示 → 顶层 <code>system_instruction</code>；多轮对话用 <code>previous_interaction_id</code>（服务端管理历史，语义与客户端拼 messages 不同）。</span><span class="e"><code>messages</code> → <code>input</code> (or <code>contents</code>); system hints → top-level <code>system_instruction</code>; multi-turn uses <code>previous_interaction_id</code> (server-managed history — different semantics from client-side <code>messages</code>).</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">改名</span><span class="e">RENAMED</span></span><span><b><code>max_tokens</code> → <code>generation_config.max_output_tokens</code>。</b><span class="z">参数名<strong>和</strong>层级都变了，直接搬运会在「意料之外的位置」失效。</span><span class="e"><code>max_tokens</code> → <code>generation_config.max_output_tokens</code> — both the name <strong>and</strong> nesting change.</span></span></li>
+            <li class="vd vd-silent"><span class="vd-badge"><span class="z">忽略</span><span class="e">IGNORED</span></span><span><b>新版模型忽略采样参数。</b><span class="z">官方文档：Gemini 3.6+ / 4 会<strong>忽略</strong>自定义 <code>temperature</code> / <code>top_p</code> / <code>top_k</code> 并返回弃用警告头——200 照常，但你没在控温度。</span><span class="e">Per official docs: Gemini 3.6+/4 <strong>ignore</strong> custom <code>temperature</code>/<code>top_p</code>/<code>top_k</code> and return deprecation warning headers — 200 OK, but you're not controlling temperature.</span></span></li>
+            <li class="vd vd-drop"><span class="vd-badge"><span class="z">不支持</span><span class="e">UNSUPPORTED</span></span><span><b><code>response_format</code> / <code>frequency_penalty</code> / <code>seed</code> 原生不支持。</b><span class="z">结构化输出走 <code>responseMimeType: application/json</code> + <code>responseSchema</code>。</span><span class="e"><code>response_format</code>/<code>frequency_penalty</code>/<code>seed</code> aren't native; structured output uses <code>responseMimeType</code> + <code>responseSchema</code>.</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">响应</span><span class="e">RESPONSE</span></span><span><b>返回是 <code>output_text</code> / <code>candidates[0].content.parts[0].text</code>。</b><span class="z">流式、用量（<code>usageMetadata</code>）字段名也全不同。</span><span class="e">Response is <code>output_text</code> / <code>candidates[0].content.parts[0].text</code>; streaming and usage (<code>usageMetadata</code>) fields differ too.</span></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gemini 兼容层 -->
+    <div class="lab" data-panel="t-gemcompat" hidden>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-ge">Gemini</span><span class="lab-title"><span class="z">Gemini 的 OpenAI 兼容层（只改三行）</span><span class="e">Gemini OpenAI-compat (three lines)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> openai <span class="k">import</span> OpenAI
+client = OpenAI(
+    api_key=<span class="s">"GEMINI_API_KEY"</span>,                              <span class="c"># ①</span>
+    base_url=<span class="hl"><span class="s">"https://generativelanguage.googleapis.com/v1beta/openai/"</span></span>,  <span class="c"># ②</span>
+)
+resp = client.chat.completions.create(
+    model=<span class="hl"><span class="s">"gemini-3.8-flash"</span></span>,                      <span class="c"># ③</span>
+    messages=[
+        {<span class="s">"role"</span>: <span class="s">"system"</span>, <span class="s">"content"</span>: <span class="s">"你是简洁的助手，只输出 JSON。"</span>},
+        {<span class="s">"role"</span>: <span class="s">"user"</span>,   <span class="s">"content"</span>: <span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span>},
+    ],
+    max_tokens=200,
+)
+<span class="k">print</span>(resp.choices[0].message.content)</code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单</span><span class="e">Verdicts</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-ok"><span class="vd-badge"><span class="z">兼容</span><span class="e">OK</span></span><span><b>官方兼容层：只改三行。</b><span class="z">换 <code>api_key</code>、<code>base_url</code>、<code>model</code>，OpenAI SDK 原样可用——这是「能跑」的来源。</span><span class="e">Official compat layer: just change <code>api_key</code>, <code>base_url</code>, and <code>model</code>. The OpenAI SDK works as-is — that's where "it runs" comes from.</span></span></li>
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">映射</span><span class="e">MAPPED</span></span><span><b><code>reasoning_effort</code> ↔ <code>thinking_level</code> / <code>thinking_budget</code>。</b><span class="z">OpenAI 的推理力度被映射到 Gemini 的思考配置，级别并不一一对应。</span><span class="e">OpenAI's <code>reasoning_effort</code> maps to Gemini's <code>thinking_level</code>/<code>thinking_budget</code> — levels don't map 1:1.</span></span></li>
+            <li class="vd vd-silent"><span class="vd-badge"><span class="z">忽略</span><span class="e">IGNORED</span></span><span><b>白名单之外的参数被静默忽略。</b><span class="z">官方文档明示：兼容层会<strong>静默忽略</strong>未列出的参数。HTTP 200，但你的 <code>frequency_penalty</code> 根本没被收到。</span><span class="e">Official docs state the layer <strong>silently ignores</strong> parameters outside its whitelist. HTTP 200, but your <code>frequency_penalty</code> was never received.</span></span></li>
+            <li class="vd vd-extra"><span class="vd-badge"><span class="z">扩展</span><span class="e">EXTRA</span></span><span><b>Gemini 专属能力走 <code>extra_body</code>。</b><span class="z">如 <code>google.thinking_config</code>、grounding、safety settings。</span><span class="e">Gemini-specific features go through <code>extra_body</code>, e.g. <code>google.thinking_config</code>, grounding, safety settings.</span></span></li>
+            <li class="vd vd-drift"><span class="vd-badge"><span class="z">语义</span><span class="e">SEMANTICS</span></span><span><b>模型行为仍是 Gemini 的。</b><span class="z">默认值、思考、输出风格、token 计费都与 OpenAI 不同——兼容的是「请求信封」，不是「模型人格」。</span><span class="e">Model behavior is still Gemini's: defaults, thinking, style, and token billing differ. Compatible is the "request envelope", not the "model persona".</span></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- vLLM -->
+    <div class="lab" data-panel="t-vllm" hidden>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-cp">vLLM</span><span class="lab-title"><span class="z">vLLM 本地端点（自托管兼容层）</span><span class="e">vLLM local endpoint (self-hosted compat)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> openai <span class="k">import</span> OpenAI
+client = OpenAI(
+    base_url=<span class="hl"><span class="s">"http://localhost:8000/v1"</span></span>,
+    api_key=<span class="s">"token-abc123"</span>,
+)
+resp = client.chat.completions.create(
+    model=<span class="s">"Qwen/Qwen2.5-7B-Instruct"</span>,
+    messages=[
+        {<span class="s">"role"</span>: <span class="s">"system"</span>, <span class="s">"content"</span>: <span class="s">"你是简洁的助手，只输出 JSON。"</span>},
+        {<span class="s">"role"</span>: <span class="s">"user"</span>,   <span class="s">"content"</span>: <span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span>},
+    ],
+    max_tokens=200,
+    extra_body={<span class="s">"top_k"</span>: 50, <span class="s">"min_p"</span>: 0.05},  <span class="c"># vLLM 扩展参数</span>
+)
+<span class="k">print</span>(resp.choices[0].message.content)</code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单</span><span class="e">Verdicts</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-ok"><span class="vd-badge"><span class="z">兼容</span><span class="e">OK</span></span><span><b>OpenAI Chat API 参数大体兼容。</b><span class="z">官方 OpenAI Python 客户端直接可用，<code>max_tokens</code>、<code>messages</code>、<code>tools</code> 都接受。</span><span class="e">Chat API parameters are largely compatible; the official OpenAI Python client works directly.</span></span></li>
+            <li class="vd vd-extra"><span class="vd-badge"><span class="z">扩展</span><span class="e">EXTRA</span></span><span><b>vLLM 特有参数走 <code>extra_body</code>。</b><span class="z">如 <code>top_k</code> / <code>min_p</code> / <code>repetition_penalty</code> / <code>guided_json</code> / <code>guided_choice</code>。</span><span class="e">vLLM-specific params go via <code>extra_body</code>: <code>top_k</code>, <code>min_p</code>, <code>repetition_penalty</code>, <code>guided_json</code>, <code>guided_choice</code>.</span></span></li>
+            <li class="vd vd-err"><span class="vd-badge"><span class="z">依赖</span><span class="e">DEPENDENCY</span></span><span><b>chat template 决定生死。</b><span class="z">模型 tokenizer 必须自带 Jinja2 chat template，否则 chat 请求<strong>直接报错</strong>；同一段 <code>messages</code> 换一个模板 = 渲染出的 token 完全不同 = 行为不同（这是子任务 A 的主题）。</span><span class="e">The model must ship a Jinja2 chat template in its tokenizer, or chat requests <strong>error outright</strong>; switch templates and the same <code>messages</code> render into different tokens — different behavior.</span></span></li>
+            <li class="vd vd-silent"><span class="vd-badge"><span class="z">忽略</span><span class="e">IGNORED</span></span><span><b>一批 OpenAI 参数不被支持。</b><span class="z">如 <code>seed</code>、<code>logit_bias</code>、<code>image_url.detail</code> ——不报错，直接忽略。</span><span class="e">Several OpenAI params aren't supported — <code>seed</code>, <code>logit_bias</code>, <code>image_url.detail</code> — no error, just ignored.</span></span></li>
+            <li class="vd vd-drift"><span class="vd-badge"><span class="z">语义</span><span class="e">SEMANTICS</span></span><span><b>同名参数 ≠ 同算法。</b><span class="z"><code>response_format</code> 由后端 guided decoding 实现（严格度不同）；<code>repetition_penalty</code> 与 OpenAI 的 <code>frequency_penalty</code> 是<strong>不同算法</strong>。</span><span class="e">Same name ≠ same algorithm: <code>response_format</code> is implemented by backend guided decoding; <code>repetition_penalty</code> is a <strong>different algorithm</strong> from OpenAI's <code>frequency_penalty</code>.</span></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Azure -->
+    <div class="lab" data-panel="t-azure" hidden>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="tag t-az">Azure</span><span class="lab-title"><span class="z">Azure OpenAI（同族兼容层）</span><span class="e">Azure OpenAI (same-family compat)</span></span></div>
+        <div class="lab-body">
+<pre><code><span class="k">from</span> openai <span class="k">import</span> AzureOpenAI
+client = AzureOpenAI(
+    api_key=<span class="s">"AZURE_KEY"</span>,
+    api_version=<span class="hl"><span class="s">"2025-03-01-preview"</span></span>,   <span class="c"># api-version 必填</span>
+    azure_endpoint=<span class="s">"https://&lt;你的资源&gt;.openai.azure.com"</span>,
+)
+resp = client.chat.completions.create(
+    model=<span class="hl"><span class="s">"my-gpt4o-deployment"</span></span>,   <span class="c"># 部署名，不是全局模型名</span>
+    messages=[
+        {<span class="s">"role"</span>: <span class="s">"system"</span>, <span class="s">"content"</span>: <span class="s">"你是简洁的助手，只输出 JSON。"</span>},
+        {<span class="s">"role"</span>: <span class="s">"user"</span>,   <span class="s">"content"</span>: <span class="s">"把这句话里的城市抽出来：北京是中国首都。"</span>},
+    ],
+    max_tokens=200,
+)
+<span class="k">print</span>(resp.choices[0].message.content)</code></pre>
+        </div>
+      </div>
+      <div class="lab-panel">
+        <div class="lab-head"><span class="lab-title"><span class="z">差异清单</span><span class="e">Verdicts</span></span></div>
+        <div class="lab-body">
+          <ul class="vd-list">
+            <li class="vd vd-move"><span class="vd-badge"><span class="z">配置</span><span class="e">CONFIG</span></span><span><b>换 <code>AzureOpenAI</code> 客户端。</b><span class="z"><code>api_version</code> 必填（查询参数），端点用 <code>azure_endpoint</code>。</span><span class="e">Use the <code>AzureOpenAI</code> client; <code>api_version</code> is required as a query param, endpoint via <code>azure_endpoint</code>.</span></span></li>
+            <li class="vd vd-drift"><span class="vd-badge"><span class="z">命名</span><span class="e">NAMING</span></span><span><b><code>model</code> 传的是「部署名」。</b><span class="z">如 <code>gpt-35-turbo</code> 或自定义部署名，不是全局模型名。</span><span class="e"><code>model</code> takes a "deployment name" like <code>gpt-35-turbo</code>, not a global model id.</span></span></li>
+            <li class="vd vd-drift"><span class="vd-badge"><span class="z">时差</span><span class="e">LAG</span></span><span><b>同一 API 家族，但能力分批上线。</b><span class="z">新参数 / 新能力（如某些响应格式）在 Azure 上可能落后主 API 数个版本。</span><span class="e">Same API family, but features roll out in batches — new params can lag the main API by several versions.</span></span></li>
+            <li class="vd vd-extra"><span class="vd-badge"><span class="z">扩展</span><span class="e">EXTRA</span></span><span><b>Azure 特有行为。</b><span class="z">内容过滤（content filter）默认介入、区域合规、网络隔离——同一提示词可能触发不同拦截。</span><span class="e">Azure-specific behavior: content filtering by default, regional compliance, network isolation — the same prompt can trip different filters.</span></span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="lab-note"><span class="z">示例基于官方文档整理（2026-10）；模型名与字段以各厂商最新文档为准，详见文末「一手资料」。</span><span class="e">Examples compiled from official docs (Oct 2026); model names and fields follow each vendor's latest docs — see "Primary Sources" at the bottom.</span></p>
+  </div>
+</section>
+
+<!-- ===== 差异矩阵 ===== -->
+<section class="sec" id="matrix">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">03 · 交互 · 行为差异矩阵</span><span class="e">03 · Interactive · Diff Matrix</span></span>
+      <h2><span class="z">12 个维度，逐项对比</span><span class="e">12 Dimensions, Compared Row by Row</span></h2>
+      <p><span class="z">点击任意一行查看详解与官方文档出处。先用筛选器只看你最关心的失败模式。</span><span class="e">Click any row for the detailed explanation and official sources. Use the filters to focus on the failure mode you care about.</span></p>
+    </div>
+
+    <div class="mt-filters" role="group" aria-label="矩阵筛选">
+      <button class="mt-filter on" data-filter="all"><span class="z">全部</span><span class="e">All</span></button>
+      <button class="mt-filter" data-filter="err"><span class="z">报错型</span><span class="e">Hard errors</span></button>
+      <button class="mt-filter" data-filter="silent"><span class="z">静默忽略</span><span class="e">Silently ignored</span></button>
+      <button class="mt-filter" data-filter="drift"><span class="z">语义漂移</span><span class="e">Semantic drift</span></button>
+    </div>
+
+    <div class="matrix-wrap">
+      <div class="matrix-scroll">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th class="rowhead"><span class="z">维度</span><span class="e">Dimension</span></th>
+              <th class="oa"><span class="z">OpenAI</span><span class="e">OpenAI</span></th>
+              <th class="cl"><span class="z">Anthropic Claude</span><span class="e">Anthropic Claude</span></th>
+              <th class="ge"><span class="z">Google Gemini</span><span class="e">Google Gemini</span></th>
+              <th class="cp"><span class="z">vLLM 等兼容层</span><span class="e">vLLM &amp; compat</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-row="r1" data-tag="drift">
+              <th class="rowhead"><span class="z">消息结构</span><span class="e">Message shape</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>messages</code>[{role,content}]</td>
+              <td><code>messages</code>（user/assistant）+ <code>system</code> 顶层</td>
+              <td><code>input</code> / <code>contents</code> + <code>system_instruction</code></td>
+              <td><code>messages</code>（按 chat template 渲染）</td>
+            </tr>
+            <tr data-row="r2" data-tag="drift">
+              <th class="rowhead"><span class="z">system 提示位置</span><span class="e">System prompt location</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>messages[0]</code></td>
+              <td>顶层 <code>system</code> 参数</td>
+              <td>顶层 <code>system_instruction</code></td>
+              <td><code>messages[0]</code>（兼容映射）</td>
+            </tr>
+            <tr data-row="r3" data-tag="drift">
+              <th class="rowhead"><span class="z">输出上限参数</span><span class="e">Max-output parameter</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>max_tokens</code>；推理模型推荐 <code>max_completion_tokens</code></td>
+              <td><code>max_tokens</code> <b>必填</b></td>
+              <td><code>generation_config.max_output_tokens</code></td>
+              <td><code>max_tokens</code>（映射）</td>
+            </tr>
+            <tr data-row="r4" data-tag="drift">
+              <th class="rowhead"><span class="z">JSON / 结构化输出</span><span class="e">JSON / structured output</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>response_format</code>（json_object / json_schema strict）</td>
+              <td><span class="z">无此参数</span><span class="e">none</span>（工具 / 预填充）</td>
+              <td><code>responseMimeType</code> + <code>responseSchema</code></td>
+              <td><code>response_format</code>（guided decoding 实现）</td>
+            </tr>
+            <tr data-row="r5" data-tag="err">
+              <th class="rowhead"><span class="z">工具调用 schema</span><span class="e">Tool-call schema</span><span class="rh-tag rt-err"><span class="z">报错</span><span class="e">error</span></span></th>
+              <td><code>parameters</code> + <code>tool_choice</code> + <code>strict</code></td>
+              <td><code>input_schema</code> + <code>tool_choice</code>(auto/any/tool)</td>
+              <td><code>functionDeclarations</code>（原生）/ <code>tools</code>（兼容层）</td>
+              <td><code>parameters</code>（同 OpenAI）</td>
+            </tr>
+            <tr data-row="r6" data-tag="drift">
+              <th class="rowhead"><span class="z">停止序列</span><span class="e">Stop sequences</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>stop</code>[]</td>
+              <td><code>stop_sequences</code>[]</td>
+              <td><code>generation_config.stopSequences</code></td>
+              <td><code>stop</code>[]</td>
+            </tr>
+            <tr data-row="r7" data-tag="err">
+              <th class="rowhead"><span class="z">惩罚 / 采样参数</span><span class="e">Penalty &amp; sampling</span><span class="rh-tag rt-err"><span class="z">报错</span><span class="e">error</span></span></th>
+              <td><code>frequency_penalty</code> / <code>presence_penalty</code> / <code>top_p</code></td>
+              <td><span class="z">penalty 类不支持（拒绝）</span><span class="e">penalties unsupported</span></td>
+              <td><span class="z">3.6+ 忽略 temperature / top_p / top_k</span><span class="e">3.6+ ignores temp/top_p/top_k</span></td>
+              <td><code>repetition_penalty</code>（不同算法）</td>
+            </tr>
+            <tr data-row="r8" data-tag="silent">
+              <th class="rowhead"><span class="z">seed / 确定性</span><span class="e">Seed / determinism</span><span class="rh-tag rt-silent"><span class="z">忽略</span><span class="e">ignored</span></span></th>
+              <td><code>seed</code>（尽力而为）</td>
+              <td><span class="z">不支持</span><span class="e">none</span></td>
+              <td><span class="z">部分模型支持</span><span class="e">some models</span></td>
+              <td><span class="z">多数忽略</span><span class="e">usually ignored</span></td>
+            </tr>
+            <tr data-row="r9" data-tag="drift">
+              <th class="rowhead"><span class="z">流式响应格式</span><span class="e">Streaming shape</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>choices[0].delta</code></td>
+              <td>SSE 事件 <code>content_block_delta</code></td>
+              <td><code>candidates[0].content.parts</code></td>
+              <td><code>choices[0].delta</code>（兼容层）</td>
+            </tr>
+            <tr data-row="r10" data-tag="drift">
+              <th class="rowhead"><span class="z">用量 / 计费字段</span><span class="e">Usage fields</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><code>prompt_tokens</code> / <code>completion_tokens</code>（+details）</td>
+              <td><code>input_tokens</code> / <code>output_tokens</code></td>
+              <td><code>usageMetadata.promptTokenCount</code></td>
+              <td><code>prompt_tokens</code>（映射）</td>
+            </tr>
+            <tr data-row="r11" data-tag="silent">
+              <th class="rowhead"><span class="z">temperature 默认</span><span class="e">Temperature default</span><span class="rh-tag rt-silent"><span class="z">忽略</span><span class="e">ignored</span></span></th>
+              <td><span class="z">多为 1.0</span><span class="e">often 1.0</span></td>
+              <td>1.0（实现不同）</td>
+              <td><span class="z">模型默认；3.6+ 忽略自定义</span><span class="e">model default; custom ignored 3.6+</span></td>
+              <td><span class="z">各后端不同</span><span class="e">backend-dependent</span></td>
+            </tr>
+            <tr data-row="r12" data-tag="drift">
+              <th class="rowhead"><span class="z">多轮对话</span><span class="e">Multi-turn</span><span class="rh-tag rt-drift"><span class="z">漂移</span><span class="e">drift</span></span></th>
+              <td><span class="z">客户端拼 <code>messages</code></span><span class="e">client builds <code>messages</code></span></td>
+              <td><span class="z">客户端拼 <code>messages</code></span><span class="e">client builds <code>messages</code></span></td>
+              <td><code>previous_interaction_id</code>（服务端历史）</td>
+              <td><span class="z">客户端拼 <code>messages</code></span><span class="e">client builds <code>messages</code></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="matrix-detail" id="matrixDetail">
+        <h4 id="mdTitle"></h4>
+        <p id="mdBody"></p>
+        <p class="ref"><span class="z">出处：</span><span class="e">Source: </span><span id="mdRef"></span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 陷阱测试 ===== -->
+<section class="sec sec-alt" id="quiz">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">04 · 交互 · 陷阱测试</span><span class="e">04 · Interactive · Pitfall Quiz</span></span>
+      <h2><span class="z">这些坑，你能全对吗？</span><span class="e">Can You Get All of These Right?</span></h2>
+      <p><span class="z">每题选一个答案，点完即见解析与官方出处。</span><span class="e">Pick an answer per question; the explanation and official source appear instantly.</span></p>
+    </div>
+    <div class="quiz-list" id="quizList">
+
+      <div class="quiz" data-q="1">
+        <span class="q-no">Q1</span>
+        <p class="q-t"><span class="z">用 Claude 原生 API，请求体里<strong>不传</strong> <code>max_tokens</code>，会发生什么？</span><span class="e">Calling the Claude native API <strong>without</strong> <code>max_tokens</code> in the body — what happens?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="0"><span class="z">A · 正常返回，模型自行决定长度</span><span class="e">A · Returns normally; the model decides length</span></button>
+          <button class="quiz-opt" data-ok="1"><span class="z">B · 400 报错：max_tokens 是必填参数</span><span class="e">B · 400 error: max_tokens is required</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。<code>max_tokens</code> 在 Anthropic Messages API 中是 required 字段，且不同模型有不同上限。OpenAI 的惯例是「可省略、有默认」，搬代码时最容易漏的就是这种「对方强制要求」的参数。</span><span class="e">Correct. <code>max_tokens</code> is a required field in the Anthropic Messages API, with per-model caps. OpenAI's convention is "optional with a default" — required-on-the-other-side params are the easiest to miss when porting.</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">docs.anthropic.com/en/api/messages</a></span></div>
+      </div>
+
+      <div class="quiz" data-q="2">
+        <span class="q-no">Q2</span>
+        <p class="q-t"><span class="z">把 OpenAI 的 <code>response_format={"type":"json_object"}</code> 原样发给 Claude 原生 API？</span><span class="e">Sending OpenAI's <code>response_format={"type":"json_object"}</code> verbatim to the Claude native API?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="1"><span class="z">A · 报错：Anthropic 没有这个参数</span><span class="e">A · Error: Anthropic has no such parameter</span></button>
+          <button class="quiz-opt" data-ok="0"><span class="z">B · 静默忽略，仍然输出 JSON</span><span class="e">B · Silently ignored, JSON still returned</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。Anthropic 是「严格型」：未知参数会被拒绝。想要稳定 JSON 输出，得改用 system 提示 + 工具调用（<code>input_schema</code>）或预填充——接口完全不同，不是「加个参数」的事。</span><span class="e">Correct. Anthropic is "strict": unknown parameters are rejected. For reliable JSON you must switch to system hints + tool use (<code>input_schema</code>) or prefill — a different interface, not "one more parameter".</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">docs.anthropic.com/en/api/messages</a></span></div>
+      </div>
+
+      <div class="quiz" data-q="3">
+        <span class="q-no">Q3</span>
+        <p class="q-t"><span class="z">通过 HTTP 直发，把 <code>frequency_penalty=0.5</code> 交给 Claude，结果？</span><span class="e">Sending <code>frequency_penalty=0.5</code> to Claude via raw HTTP?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="0"><span class="z">A · 静默忽略（200）</span><span class="e">A · Silently ignored (200)</span></button>
+          <button class="quiz-opt" data-ok="1"><span class="z">B · 被拒：未知参数</span><span class="e">B · Rejected: unknown parameter</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。Claude 没有 penalty 类参数（连 <code>presence_penalty</code>、<code>seed</code> 都没有）。这与 vLLM / Gemini 兼容层的「静默忽略」正好相反——同一段代码，一个端点拒绝、一个端点假装没看见，调试难度完全不同。</span><span class="e">Correct. Claude has no penalty parameters (nor <code>presence_penalty</code> or <code>seed</code>). This is the opposite of the "silent ignore" behavior of vLLM / Gemini compat — one endpoint rejects, another pretends not to see it.</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">docs.anthropic.com/en/api/messages</a></span></div>
+      </div>
+
+      <div class="quiz" data-q="4">
+        <span class="q-no">Q4</span>
+        <p class="q-t"><span class="z">给 Gemini 3.6+ 原生 API 传 <code>temperature=1.5</code>？</span><span class="e">Passing <code>temperature=1.5</code> to the Gemini 3.6+ native API?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="1"><span class="z">A · 忽略自定义值并返回弃用警告头</span><span class="e">A · Custom value ignored + deprecation warning header</span></button>
+          <button class="quiz-opt" data-ok="0"><span class="z">B · 直接 400 报错</span><span class="e">B · 400 error outright</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。官方文档明确：Gemini 3.6+/4 会忽略自定义 <code>temperature</code> / <code>top_p</code> / <code>top_k</code> 并返回弃用警告头——响应是 200，但你的采样参数从未生效。这是「静默忽略」的教科书案例。</span><span class="e">Correct. Official docs state Gemini 3.6+/4 ignore custom <code>temperature</code>/<code>top_p</code>/<code>top_k</code> and return deprecation warning headers — 200 OK, but your sampling params never applied. Textbook "silent ignore".</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">ai.google.dev/gemini-api/docs/text-generation</a></span></div>
+      </div>
+
+      <div class="quiz" data-q="5">
+        <span class="q-no">Q5</span>
+        <p class="q-t"><span class="z">用 OpenAI SDK + <code>base_url</code> 指向 Gemini 兼容层，请求返回 200——能证明行为与 OpenAI 等价吗？</span><span class="e">OpenAI SDK with <code>base_url</code> pointed at Gemini's compat layer returns 200 — does that prove behavioral equivalence?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="0"><span class="z">A · 能，200 即等价</span><span class="e">A · Yes, 200 = equivalent</span></button>
+          <button class="quiz-opt" data-ok="1"><span class="z">B · 不能，白名单外参数被静默忽略</span><span class="e">B · No — params outside the whitelist are silently dropped</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。这是「能跑 ≠ 语义相同」的核心。兼容层官方文档明示：白名单之外的参数会被静默忽略；<code>reasoning_effort</code> 等只做近似映射。验证迁移是否成功，必须用 eval 对比行为，而不是看 HTTP 状态码。</span><span class="e">Correct — the heart of "it runs ≠ it means the same". The compat docs state params outside the whitelist are silently ignored; <code>reasoning_effort</code> is only approximately mapped. Validate a port by comparing behavior with evals, not by checking the HTTP status.</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://ai.google.dev/gemini-api/docs/openai" target="_blank" rel="noopener">ai.google.dev/gemini-api/docs/openai</a></span></div>
+      </div>
+
+      <div class="quiz" data-q="6">
+        <span class="q-no">Q6</span>
+        <p class="q-t"><span class="z">在 vLLM 上把同一段 <code>messages</code> 换给另一个模型（不同 chat template）？</span><span class="e">On vLLM, feeding the same <code>messages</code> to another model with a different chat template?</span></p>
+        <div class="quiz-opts">
+          <button class="quiz-opt" data-ok="1"><span class="z">A · 渲染出的 token 可能完全不同，甚至直接报错</span><span class="e">A · Rendered tokens can differ drastically — or it errors outright</span></button>
+          <button class="quiz-opt" data-ok="0"><span class="z">B · 输入 token 完全一样</span><span class="e">B · Input tokens are identical</span></button>
+        </div>
+        <div class="quiz-exp"><span class="z">对。vLLM 依赖模型 tokenizer 自带的 Jinja2 chat template；模型没有模板时 chat 请求直接报错。即使都有模板，不同模板会把 system / user 包进不同的 control tokens——这是子任务 A（Chat Template）的主题，也是「同一段代码换模型 = 不同输入」的最直观例子。</span><span class="e">Correct. vLLM requires a Jinja2 chat template in the model's tokenizer — chat requests error if it's missing. Even with templates, different templates wrap system/user in different control tokens — the topic of Subtask A, and the clearest case of "same code, different input".</span><br><span class="ref"><span class="z">出处：</span><span class="e">Source: </span><a href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">docs.vllm.ai · OpenAI-Compatible Server</a></span></div>
+      </div>
+
+    </div>
+    <p style="margin-top:18px;font-size:14px;color:var(--faint)"><span class="z">当前得分：</span><span class="e">Score: </span><b class="cl-count" id="quizScore">0 / 6</b></p>
+  </div>
+</section>
+
+<!-- ===== 迁移清单 ===== -->
+<section class="sec" id="checklist">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">05 · 交互 · 迁移清单</span><span class="e">05 · Interactive · Migration Checklist</span></span>
+      <h2><span class="z">把这段代码搬到新端点前</span><span class="e">Before You Port This Snippet</span></h2>
+      <p><span class="z">勾选即存档（浏览器本地记忆），进度条实时更新。</span><span class="e">Checks persist locally; the progress bar updates live.</span></p>
+    </div>
+    <div class="checklist-card">
+      <div class="cl-progress"><i id="clBar"></i></div>
+      <div id="clList">
+        <label class="cl-item"><input type="checkbox" data-cl="1"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">列出你依赖的<strong>全部 OpenAI 专属参数</strong>（<code>frequency_penalty</code> / <code>presence_penalty</code> / <code>seed</code> / <code>logit_bias</code> / <code>response_format</code>…），逐个查目标端点的支持表。</span><span class="e">List every <strong>OpenAI-specific parameter</strong> you rely on (<code>frequency_penalty</code>, <code>presence_penalty</code>, <code>seed</code>, <code>logit_bias</code>, <code>response_format</code>…) and check each against the target's support table.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="2"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">确认 <code>max_tokens</code>：目标端点<strong>是否必填</strong>？名字是否叫 <code>max_output_tokens</code>？是否在 <code>generation_config</code> 里？</span><span class="e">Confirm <code>max_tokens</code>: is it <strong>required</strong> there? Is it renamed <code>max_output_tokens</code>? Does it live inside <code>generation_config</code>?</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="3"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">system 提示：目标是 <code>messages[0]</code>、顶层 <code>system</code>，还是 <code>system_instruction</code>？别把指令送进 user 内容里。</span><span class="e">System prompt: is it <code>messages[0]</code>, a top-level <code>system</code>, or <code>system_instruction</code>? Don't smuggle instructions into user content.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="4"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">响应结构：<code>choices[0].message.content</code> 在目标端点的等价物是什么？流式 <code>delta</code> 又对应什么事件？</span><span class="e">Response shape: what is the equivalent of <code>choices[0].message.content</code>? Which stream event corresponds to <code>delta</code>?</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="5"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">用官方兼容层时，<strong>通读「已知差异」文档</strong>（如 Gemini 的 OpenAI 兼容页），把白名单 / 映射关系圈出来。</span><span class="e">When using an official compat layer, <strong>read the "known differences" doc</strong> (e.g. Gemini's OpenAI page) and mark the whitelist / mappings.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="6"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">别用「HTTP 200」验证迁移：准备一组固定 test case，<strong>对比输出行为</strong>（格式、长度、失败模式）。</span><span class="e">Don't validate a port with "HTTP 200": prepare fixed test cases and <strong>compare output behavior</strong> — format, length, failure modes.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="7"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">采样参数（<code>temperature</code> / <code>top_p</code>）：目标端点是否<strong>忽略</strong>？默认值是多少？忽略后你会得到「确定性假象」。</span><span class="e">Sampling params (<code>temperature</code>/<code>top_p</code>): does the target <strong>ignore</strong> them? What's the default? Ignored params create a "false determinism".</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="8"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">多轮对话：目标是「客户端拼 <code>messages</code>」还是「服务端历史（如 <code>previous_interaction_id</code>）」？前者可控，后者省 token 但语义不同。</span><span class="e">Multi-turn: does the target use client-built <code>messages</code> or server-side history (e.g. <code>previous_interaction_id</code>)? The latter saves tokens but changes semantics.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="9"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">计费口径：<code>input_tokens</code> / <code>prompt_tokens</code> 字段名不同，部分端点按<strong>字符</strong>而非 token 计费——做成本估算时别直接乘单价。</span><span class="e">Billing units: field names differ (<code>input_tokens</code> vs <code>prompt_tokens</code>); some endpoints bill by <strong>characters</strong>, not tokens — don't multiply prices directly.</span></span></label>
+        <label class="cl-item"><input type="checkbox" data-cl="10"><span class="cl-box"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></span><span class="cl-text"><span class="z">给每个端点写一张<strong>「参数映射表」</strong>（OpenAI 参数 → 目标参数 → 备注），随项目放进 AGENTS.md，让下次迁移有据可查。</span><span class="e">Write a <strong>parameter mapping table</strong> per endpoint (OpenAI param → target param → notes) and keep it in AGENTS.md so the next port has a reference.</span></span></label>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="cl-reset" id="clReset"><span class="z">重置清单</span><span class="e">Reset checklist</span></button>
+        <span class="cl-count" id="clCount"><span class="z">0 / 10 已完成</span><span class="e">0 / 10 done</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 结论 ===== -->
+<section class="sec sec-alt" id="conclusion">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">06 · 结论</span><span class="e">06 · Takeaways</span></span>
+      <h2><span class="z">三句话带走</span><span class="e">Three Sentences to Take Away</span></h2>
+    </div>
+    <div class="takeaway">
+      <div class="tk">
+        <h3><span class="z">① 兼容层承诺的是「信封」</span><span class="e">① Compat promises the "envelope"</span></h3>
+        <p><span class="z">「OpenAI 兼容」只覆盖请求<strong>格式</strong>。模型行为、默认值、采样、计费都是各家自己的——<code>200</code> 只证明端点存在。</span><span class="e">"OpenAI-compatible" covers only request <strong>shape</strong>. Behavior, defaults, sampling, and billing stay vendor-specific — <code>200</code> proves the endpoint exists, nothing more.</span></p>
+      </div>
+      <div class="tk">
+        <h3><span class="z">② 失败有三种形态</span><span class="e">② Failures come in three forms</span></h3>
+        <p><span class="z"><b style="color:var(--err)">报错</b>（Claude 拒未知参数）好查；<b style="color:var(--warn)">静默忽略</b>（Gemini 兼容层、vLLM）最危险；<b style="color:var(--ge)">语义漂移</b>（同名参数不同含义）最难 debug。先判断你的端点属于哪种性格。</span><span class="e"><b style="color:var(--err)">Hard errors</b> (Claude rejecting unknowns) are easy; <b style="color:var(--warn)">silent ignores</b> (Gemini compat, vLLM) are dangerous; <b style="color:var(--ge)">semantic drift</b> (same name, different meaning) is the hardest to debug. Know your endpoint's personality first.</span></p>
+      </div>
+      <div class="tk">
+        <h3><span class="z">③ 正确姿势：文档 → 映射表 → Eval</span><span class="e">③ The right order: docs → mapping → eval</span></h3>
+        <p><span class="z">先读<strong>一手文档</strong>的「已知差异」，写<strong>参数映射表</strong>（进 AGENTS.md），最后用 <strong>eval</strong> 对比行为——而不是「跑通了就收工」。</span><span class="e">Read the <strong>primary docs'</strong> known-differences, write a <strong>mapping table</strong> (into AGENTS.md), then verify with an <strong>eval</strong> — not "it ran, we're done".</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 一手资料 ===== -->
+<section class="sec" id="refs">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-eyebrow"><span class="z">07 · 一手资料</span><span class="e">07 · Primary Sources</span></span>
+      <h2><span class="z">全部结论均可追溯</span><span class="e">Every Claim Is Traceable</span></h2>
+      <p><span class="z">本页所有差异说明均来自厂商官方文档（2026-10 核对），未使用二手博客。</span><span class="e">All differences on this page come from vendor official docs (verified Oct 2026) — no second-hand blogs.</span></p>
+    </div>
+    <div class="refs">
+      <a class="ref-card" href="https://ai.google.dev/gemini-api/docs/openai" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <span><span class="rc-t"><span class="z">Gemini · OpenAI 兼容层（改三行 / 白名单 / 静默忽略 / reasoning_effort 映射）</span><span class="e">Gemini · OpenAI-compatible (3-line switch / whitelist / silent ignore / reasoning_effort mapping)</span></span><span class="rc-u">ai.google.dev/gemini-api/docs/openai</span></span>
+      </a>
+      <a class="ref-card" href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
+        <span><span class="rc-t"><span class="z">Gemini 原生 · 文本生成（system_instruction / max_output_tokens / temperature 忽略规则）</span><span class="e">Gemini native · text generation (system_instruction / max_output_tokens / temperature ignore)</span></span><span class="rc-u">ai.google.dev/gemini-api/docs/text-generation</span></span>
+      </a>
+      <a class="ref-card" href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h6"/></svg></span>
+        <span><span class="rc-t"><span class="z">Anthropic · Messages API（max_tokens 必填 / system 顶层 / 严格参数校验）</span><span class="e">Anthropic · Messages API (required max_tokens / top-level system / strict validation)</span></span><span class="rc-u">docs.anthropic.com/en/api/messages</span></span>
+      </a>
+      <a class="ref-card" href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span>
+        <span><span class="rc-t"><span class="z">vLLM · OpenAI 兼容服务（chat template 依赖 / extra_body / guided decoding）</span><span class="e">vLLM · OpenAI-compatible server (chat template requirement / extra_body / guided decoding)</span></span><span class="rc-u">docs.vllm.ai · openai_compatible_server</span></span>
+      </a>
+      <a class="ref-card" href="https://platform.openai.com/docs/api-reference/chat/create" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <span><span class="rc-t"><span class="z">OpenAI · Chat Completions 参考（max_completion_tokens / response_format / seed）</span><span class="e">OpenAI · Chat Completions reference (max_completion_tokens / response_format / seed)</span></span><span class="rc-u">platform.openai.com/docs/api-reference/chat/create</span></span>
+      </a>
+      <a class="ref-card" href="https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference" target="_blank" rel="noopener">
+        <span class="rc-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span>
+        <span><span class="rc-t"><span class="z">Azure OpenAI · API 参考（api_version / 部署名 / 内容过滤）</span><span class="e">Azure OpenAI · API reference (api_version / deployment name / content filter)</span></span><span class="rc-u">learn.microsoft.com · azure ai-foundry reference</span></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 页脚 ===== -->
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <span><span class="z">大模型与自然语言处理 · 第 2 次课实验 · 子任务 F：Provider Portability</span><span class="e">LLM &amp; NLP Lab 2 · Subtask F: Provider Portability</span></span>
+    <span><span class="z">制作：</span><span class="e">Built by: </span><b>SABER02-MAX</b> · <span class="z">中英双语</span><span class="e">Bilingual 中文 / EN</span></span>
+  </div>
+</footer>
+
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var toastEl=document.getElementById('toast'),toastTimer;
+  function toast(msg){toastEl.textContent=msg;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastEl.classList.remove('show')},1800);}
+  function isEn(){return document.body.classList.contains('lang-en');}
+
+  /* ---------- 语言切换（中文 / EN） ---------- */
+  var zhBtn=document.getElementById('langZh'),enBtn=document.getElementById('langEn');
+  function setLang(l){
+    document.body.classList.remove('lang-zh','lang-en');
+    document.body.classList.add('lang-'+l);
+    document.documentElement.lang=(l==='zh')?'zh-CN':'en';
+    zhBtn.classList.toggle('on',l==='zh');
+    enBtn.classList.toggle('on',l==='en');
+    try{localStorage.setItem('lmapiLang',l);}catch(e){}
+    renderDetail();clRender();
+  }
+  zhBtn.addEventListener('click',function(){setLang('zh');});
+  enBtn.addEventListener('click',function(){setLang('en');});
+  var savedLang=null;try{savedLang=localStorage.getItem('lmapiLang');}catch(e){}
+  setLang(savedLang==='en'?'en':'zh');
+
+  /* ---------- 移动端菜单 ---------- */
+  var burger=document.getElementById('navBurger'),menu=document.getElementById('navMenu');
+  burger.addEventListener('click',function(){
+    var open=menu.classList.toggle('open');
+    burger.setAttribute('aria-expanded',open?'true':'false');
+  });
+  menu.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){menu.classList.remove('open');burger.setAttribute('aria-expanded','false');});});
+
+  /* ---------- 滚动高亮 ---------- */
+  var spyLinks=[].slice.call(document.querySelectorAll('[data-spy]'));
+  var sections=spyLinks.map(function(a){return document.getElementById(a.getAttribute('data-spy'));}).filter(Boolean);
+  var navAnchors=[].slice.call(document.querySelectorAll('.nav-links a[data-spy], .nav-menu a[data-spy]'));
+  function onScroll(){
+    var y=window.scrollY+130,cur=null;
+    sections.forEach(function(s){if(s.offsetTop<=y){cur=s.id;}});
+    navAnchors.forEach(function(a){a.classList.toggle('active',a.getAttribute('data-spy')===cur);});
+  }
+  window.addEventListener('scroll',onScroll,{passive:true});
+  onScroll();
+
+  /* ---------- 移植台标签页 ---------- */
+  var labTabs=[].slice.call(document.querySelectorAll('.lab-tab'));
+  var labPanels=[].slice.call(document.querySelectorAll('[data-panel]'));
+  labTabs.forEach(function(t){
+    t.addEventListener('click',function(){
+      labTabs.forEach(function(x){x.classList.remove('on');x.setAttribute('aria-selected','false');});
+      t.classList.add('on');t.setAttribute('aria-selected','true');
+      var id=t.getAttribute('data-tab');
+      labPanels.forEach(function(p){p.hidden=(p.getAttribute('data-panel')!==id);});
+    });
+  });
+
+  /* ---------- 代码复制 ---------- */
+  document.querySelectorAll('.lab-panel pre').forEach(function(pre){
+    pre.style.position='relative';
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.textContent='复制 · Copy';
+    btn.setAttribute('aria-label','复制代码 / Copy code');
+    btn.style.cssText='position:absolute;top:8px;right:8px;background:rgba(255,255,255,.09);color:#D7DAE0;border:1px solid rgba(255,255,255,.18);border-radius:7px;padding:4px 11px;font-size:11.5px;cursor:pointer;font-family:inherit;z-index:2;transition:background .15s';
+    btn.addEventListener('mouseenter',function(){btn.style.background='rgba(255,255,255,.18)';});
+    btn.addEventListener('mouseleave',function(){btn.style.background='rgba(255,255,255,.09)';});
+    pre.appendChild(btn);
+    btn.addEventListener('click',function(){
+      var text=pre.querySelector('code').innerText;
+      function done(ok){toast(ok?(isEn()?'Copied to clipboard':'已复制代码'):(isEn()?'Copy failed — select manually':'复制失败，请手动框选'));}
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){done(true);},function(){done(false);});
+      }else{
+        var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+        document.body.appendChild(ta);ta.select();
+        try{document.execCommand('copy');done(true);}catch(e){done(false);}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+
+  /* ---------- 差异矩阵：行详解 ---------- */
+  var MD={
+    r1:{z:'各端点对「消息」的建模不同：OpenAI / vLLM 用 messages 数组（vLLM 再按模型自带的 Jinja2 chat template 渲染成实际输入）；Anthropic 用 messages（role 只有 user / assistant）+ 顶层 system；Gemini 用 input / contents + system_instruction。同一段对话，最终进入模型的 token 序列完全不同。',
+        e:'Message modeling differs: OpenAI/vLLM use the messages array (vLLM renders it via the model\'s own Jinja2 chat template); Anthropic uses messages (user/assistant only) + a top-level system; Gemini uses input/contents + system_instruction. The same conversation becomes a completely different token sequence at the model.',
+        ref:'<a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a> · <a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a>'},
+    r2:{z:'system 提示的位置：OpenAI 是 messages[0] 的 role，Anthropic 是顶层 system 参数，Gemini 是顶层 system_instruction，vLLM 兼容层则映射回 messages[0]。指令放错位置，会被当成「用户内容」进入上下文，优先级与注入顺序都会变。',
+        e:'System prompt location: messages[0] (OpenAI), a top-level system param (Anthropic), top-level system_instruction (Gemini), and mapped back to messages[0] in vLLM compat. Put it in the wrong place and it enters context as "user content".',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a> · <a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a>'},
+    r3:{z:'OpenAI 用 max_tokens（推理模型推荐 max_completion_tokens）；Anthropic 的 max_tokens 是必填（缺了直接 400）；Gemini 是 generation_config.max_output_tokens（名字和层级都变）；vLLM 兼容层把 max_tokens 映射过去。漏掉「对方必填」的参数是最常见的搬运错误。',
+        e:'OpenAI uses max_tokens (max_completion_tokens for reasoning models); Anthropic requires max_tokens (400 without it); Gemini uses generation_config.max_output_tokens (name and nesting both change); vLLM maps max_tokens. Missing a required-on-the-other-side field is the most common porting bug.',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a> · <a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a>'},
+    r4:{z:'结构化输出的实现路径完全不同：OpenAI 是 response_format（strict 由 JSON Schema 约束）；Anthropic 没有此参数，要用工具调用 + input_schema 或预填充；Gemini 原生用 responseMimeType + responseSchema（兼容层才暴露 response_format）；vLLM 用 guided decoding（如 guided_json）实现，严格度与 OpenAI 不同。',
+        e:'Structured-output paths differ entirely: OpenAI uses response_format (strict via JSON Schema); Anthropic has no such parameter — use tool use + input_schema or prefill; Gemini native uses responseMimeType + responseSchema (compat exposes response_format); vLLM implements it with guided decoding (guided_json) at different strictness.',
+        ref:'<a href="https://ai.google.dev/gemini-api/docs/openai" target="_blank" rel="noopener">Gemini · OpenAI compat</a> · <a href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">vLLM · OpenAI-compatible server</a>'},
+    r5:{z:'工具调用 schema 的键名不同：OpenAI 用 parameters + tool_choice(required/auto/none) + strict；Anthropic 用 input_schema + tool_choice(auto/any/tool)；Gemini 原生用 functionDeclarations（兼容层才接受 tools）。把 OpenAI 的 tools 原样发给 Anthropic 原生 API 会报错。',
+        e:'Tool schemas differ: OpenAI uses parameters + tool_choice + strict; Anthropic uses input_schema + tool_choice(auto/any/tool); Gemini native uses functionDeclarations (compat accepts tools). Sending OpenAI tools verbatim to the Anthropic native API errors.',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a> · <a href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">vLLM · OpenAI-compatible server</a>'},
+    r6:{z:'停止序列字段名不同：OpenAI / vLLM 是 stop[]，Anthropic 是 stop_sequences[]，Gemini 是 generation_config.stopSequences。字段名拼错会静默失效——停止条件没生效，输出悄悄变长，属于最难查的一类。',
+        e:'Stop-sequence field names differ: stop[] (OpenAI/vLLM), stop_sequences[] (Anthropic), generation_config.stopSequences (Gemini). A typo silently disables your stopping condition and outputs quietly grow — one of the hardest to debug.',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a>'},
+    r7:{z:'惩罚类参数是重灾区：Anthropic 没有 frequency/presence_penalty（直接拒绝）；Gemini 3.6+ 忽略自定义 temperature/top_p/top_k；vLLM 的 repetition_penalty 是另一套算法；OpenAI 的 frequency_penalty 基于已出现 token 计数。参数名相同不代表算法相同。',
+        e:'Penalties are the worst zone: Anthropic has none (rejects); Gemini 3.6+ ignores custom temperature/top_p/top_k; vLLM\'s repetition_penalty is a different algorithm; OpenAI\'s frequency_penalty counts already-seen tokens. Same names ≠ same algorithms.',
+        ref:'<a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a> · <a href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">vLLM · OpenAI-compatible server</a>'},
+    r8:{z:'确定性是「尽力而为」：OpenAI 的 seed 只保证尽力复现；Anthropic 无 seed（拒绝）；Gemini 部分模型支持 seed；vLLM 多数后端忽略 seed。追求可复现输出时，不能假设 seed 在各端点都生效——应记录完整参数集并实测对比。',
+        e:'Determinism is best-effort: OpenAI\'s seed only promises best-effort reproduction; Anthropic rejects it; some Gemini models support it; most vLLM backends ignore it. Never assume seed works everywhere — record the full parameter set and test.',
+        ref:'<a href="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html" target="_blank" rel="noopener">vLLM · OpenAI-compatible server</a>'},
+    r9:{z:'流式事件结构不同：OpenAI / vLLM 是 choices[0].delta（兼容层保持此形状）；Anthropic 是 SSE 事件 content_block_delta；Gemini 原生是 candidates[0].content.parts。按 OpenAI 结构写的解析器，接到 Anthropic 会解析不到任何内容。',
+        e:'Stream shapes differ: choices[0].delta (OpenAI/vLLM), SSE content_block_delta (Anthropic), candidates[0].content.parts (Gemini native). A parser written for the OpenAI shape reads nothing from Anthropic.',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a> · <a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a>'},
+    r10:{z:'用量字段名不同：prompt_tokens / completion_tokens（OpenAI，含 details 细分）、input_tokens / output_tokens（Anthropic）、usageMetadata.promptTokenCount（Gemini）。跨端点估算成本时，先把字段名和计费单位（token vs 字符）对齐。',
+        e:'Usage field names differ: prompt_tokens/completion_tokens (OpenAI, with details), input_tokens/output_tokens (Anthropic), usageMetadata.promptTokenCount (Gemini). Align field names and billing units (tokens vs characters) before estimating cost across endpoints.',
+        ref:'<a href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic · Messages API</a>'},
+    r11:{z:'temperature 的默认值与生效性都不同：OpenAI 多为 1.0；Anthropic 默认 1.0 但采样实现不同；Gemini 3.6+ 忽略自定义 temperature（返回弃用警告头）；vLLM 各后端默认不同。你传了 0.7，不代表真的在用 0.7。',
+        e:'Temperature defaults and effectiveness differ: OpenAI often 1.0; Anthropic 1.0 with different sampling; Gemini 3.6+ ignores custom temperature (deprecation warning header); vLLM backends vary. Passing 0.7 doesn\'t mean 0.7 is used.',
+        ref:'<a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a>'},
+    r12:{z:'多轮对话语义不同：OpenAI / Anthropic / vLLM 由客户端拼接完整 messages 历史（可控、可审计）；Gemini 原生用 previous_interaction_id 让服务端管理历史（省 token、隐式截断，但你无法得知它如何截断）。迁移多轮应用时，这决定历史的可控性。',
+        e:'Multi-turn semantics differ: OpenAI/Anthropic/vLLM let the client build full message history (controllable, auditable); Gemini native uses previous_interaction_id with server-managed history (saves tokens, implicit truncation you can\'t see). This decides history controllability when porting chat apps.',
+        ref:'<a href="https://ai.google.dev/gemini-api/docs/text-generation" target="_blank" rel="noopener">Gemini · text generation</a>'}
+  };
+  var rows=[].slice.call(document.querySelectorAll('.matrix tbody tr'));
+  var detail=document.getElementById('matrixDetail');
+  var mdTitle=document.getElementById('mdTitle'),mdBody=document.getElementById('mdBody'),mdRef=document.getElementById('mdRef');
+  var openRow=null;
+  function renderDetail(){
+    if(!detail||!detail.classList.contains('show')||!openRow)return;
+    var r=MD[openRow.getAttribute('data-row')];
+    if(!r)return;
+    var zt=openRow.querySelector('th .z'),et=openRow.querySelector('th .e');
+    mdTitle.textContent=isEn()?et.textContent:zt.textContent;
+    mdBody.innerHTML=isEn()?r.e:r.z;
+    mdRef.innerHTML=r.ref;
+  }
+  rows.forEach(function(tr){
+    tr.addEventListener('click',function(){
+      var r=MD[tr.getAttribute('data-row')];
+      if(!r)return;
+      openRow=tr;
+      rows.forEach(function(x){x.classList.remove('open');});
+      tr.classList.add('open');
+      detail.classList.add('show');
+      renderDetail();
+      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
+  });
+
+  /* ---------- 矩阵筛选 ---------- */
+  var filters=[].slice.call(document.querySelectorAll('.mt-filter'));
+  filters.forEach(function(f){
+    f.addEventListener('click',function(){
+      filters.forEach(function(x){x.classList.remove('on');});
+      f.classList.add('on');
+      var tag=f.getAttribute('data-filter');
+      rows.forEach(function(tr){
+        var show=(tag==='all')||(tr.getAttribute('data-tag')===tag);
+        tr.style.display=show?'':'none';
+      });
+    });
+  });
+
+  /* ---------- 陷阱测试 ---------- */
+  var quizCards=[].slice.call(document.querySelectorAll('.quiz'));
+  var quizScore=document.getElementById('quizScore');
+  var qRight=0,qDone=0;
+  function updateScore(){quizScore.textContent=qRight+' / 6';}
+  quizCards.forEach(function(card){
+    var opts=[].slice.call(card.querySelectorAll('.quiz-opt'));
+    var exp=card.querySelector('.quiz-exp');
+    opts.forEach(function(opt){
+      opt.addEventListener('click',function(){
+        if(opt.disabled)return;
+        var ok=opt.getAttribute('data-ok')==='1';
+        qDone++;
+        opts.forEach(function(o){o.disabled=true;});
+        opts.forEach(function(o){
+          if(o.getAttribute('data-ok')==='1'){o.classList.add('right');}
+          else if(o===opt){o.classList.add('wrong');}
+        });
+        if(ok){qRight++;}
+        updateScore();
+        exp.classList.add('show');
+      });
+    });
+  });
+  updateScore();
+
+  /* ---------- 迁移清单 ---------- */
+  var clItems=[].slice.call(document.querySelectorAll('#clList input'));
+  var clBar=document.getElementById('clBar'),clCount=document.getElementById('clCount');
+  function clRender(){
+    if(!clItems||!clItems.length)return;
+    var n=clItems.filter(function(i){return i.checked;}).length;
+    clBar.style.width=(n/clItems.length*100)+'%';
+    clCount.textContent=isEn()?(n+' / '+clItems.length+' done'):(n+' / '+clItems.length+' 已完成');
+  }
+  clItems.forEach(function(i){
+    i.addEventListener('change',function(){
+      try{localStorage.setItem('lmapiCL',JSON.stringify(clItems.map(function(x){return x.checked;})));}catch(e){}
+      clRender();
+    });
+  });
+  try{
+    var savedCL=JSON.parse(localStorage.getItem('lmapiCL')||'null');
+    if(savedCL&&savedCL.length===clItems.length){
+      clItems.forEach(function(i,idx){i.checked=!!savedCL[idx];});
+    }
+  }catch(e){}
+  document.getElementById('clReset').addEventListener('click',function(){
+    clItems.forEach(function(i){i.checked=false;});
+    try{localStorage.removeItem('lmapiCL');}catch(e){}
+    clRender();
+    toast(isEn()?'Checklist reset':'清单已重置');
+  });
+  clRender();
+})();
+</script>
+</main>
+<div class="toast" id="toast" role="status"></div>
+</body>
+</html>
